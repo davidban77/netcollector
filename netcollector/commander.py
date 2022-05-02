@@ -1,5 +1,7 @@
 """Module which holds commands definitions and exector map."""
+import uuid
 from typing import Dict, List, Tuple, Any, Optional
+from datetime import datetime
 from pydantic import BaseModel
 
 
@@ -8,21 +10,48 @@ class CommanderError(Exception):
 
 
 EXECUTOR_MAP: Dict[Tuple[str, str], Dict[str, Any]] = {
-    ("cisco_asa", "vpn_session"): dict(
-        executor="netmiko", commands=["show vpn-sessiondb"], params=dict(use_textfsm=True)
-    ),
-    ("cisco_ios", "bgp_session"): dict(
-        executor="netmiko", commands=["show bgp all neighbor"], params=dict(use_genie=True)
-    ),
-    ("cisco_ios", "lldp_neighbors"): dict(
-        executor="netmiko", commands=["show lldp neighbors"], params=dict(use_textfsm=True)
-    ),
-    ("cisco_xe", "bgp_session"): dict(
-        executor="netmiko", commands=["show ip bgp neighbors"], params=dict(use_genie=True)
-    ),
-    ("juniper_junos", "bgp_session"): dict(
-        executor="pyez", commands=["get-bgp-neighbor-information"], params=dict(table="NtcBgpTable")
-    ),
+    ("cisco_xe", "interface"): {
+        "ssh": {
+            "executor": "netmiko",
+            "commands": ["show interfaces"],
+            "params": {"use_genie": True},
+        }
+    },
+    ("cisco_asa", "vpn_session"): {
+        "ssh": {
+            "executor": "netmiko",
+            "commands": ["show vpn-sessiondb"],
+            "params": {"use_textfsm": True},
+        }
+    },
+    ("cisco_ios", "bgp_session"): {
+        "ssh": {
+            "executor": "netmiko",
+            "commands": ["show bgp all neighbor"],
+            "params": {"use_genie": True},
+        }
+    },
+    ("cisco_ios", "lldp_neighbors"): {
+        "ssh": {
+            "executor": "netmiko",
+            "commands": ["show lldp neighbors"],
+            "params": {"use_textfsm": True},
+        }
+    },
+    ("cisco_xe", "bgp_session"): {
+        "ssh": {
+            "executor": "netmiko",
+            "commands": ["show ip bgp neighbors"],
+            "params": {"use_genie": True},
+        }
+    },
+    ("juniper_junos", "bgp_session"): {
+        "netconf": {
+            "executor": "pyez",
+            "commands": ["get-bgp-neighbor-information"],
+            "params": {"table": "NtcBgpTable"},
+        }
+    },
 }
 
 
@@ -37,11 +66,23 @@ class Command(BaseModel):
     command: str
     params: Dict[str, Any] = dict()
     result: Optional[Any] = None
+    id: str = str(uuid.uuid4())
+    timestamp: Optional[datetime] = None
+    start_time: Optional[datetime] = None
+    execution_time: Optional[float] = None
+
+    def start_timing(self):
+        self.start_time = datetime.now()
+
+    def stop_timing(self):
+        self.timestamp = datetime.now()
+        if self.start_time:
+            self.execution_time = (self.timestamp - self.start_time).total_seconds()
 
 
 def create_commands(  # pylint: disable=dangerous-default-value
     device_type: str,
-    collectors: List[str],
+    collectors: List[Tuple[str, str]],
     executor_map: Dict[Tuple[str, str], Dict[str, Any]] = EXECUTOR_MAP,
 ) -> List[Command]:
     """Creates a list of Command instances.
@@ -60,12 +101,13 @@ def create_commands(  # pylint: disable=dangerous-default-value
         List[Command]: List of Command instances
     """
     commands: List[Command] = []
-    for collector in collectors:
+    for collector, collection_method in collectors:
         try:
-            directives = executor_map[(device_type, collector)]
+            directives = executor_map[(device_type, collector)][collection_method]
         except KeyError:
             raise CommanderError(
-                f"Unable to determine executor for: device_type='{device_type}', collector='{collector}'"
+                f"Unable to determine executor for: device_type='{device_type}', collector='{collector}', "
+                f"collection_method={collection_method}"
             )
 
         commands.extend(

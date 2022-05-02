@@ -1,11 +1,10 @@
 """Module which holds BGP Session data model and the respective processors that generate it."""
 from typing import List, Optional
-from pydantic import IPvAnyAddress, BaseModel
-
-from .influx import format_influx_metrics
-
+from pydantic import IPvAnyAddress
 from netcollector.commander import Command
 from netcollector.connector import ConnectParams
+from .influx import format_influx_metrics
+from .base import BaseResourceModel
 
 
 SESSION_STATE_MAP = {
@@ -59,7 +58,7 @@ def strip_ip_address(raw_address: str) -> str:
     return raw_address.split("+")[0] if "+" in raw_address else raw_address
 
 
-class BgpSession(BaseModel):
+class BgpSession(BaseResourceModel):
     """BGP Base Session.
     """
 

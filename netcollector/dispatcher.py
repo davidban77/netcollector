@@ -1,6 +1,6 @@
 """Main session and commmand dispatcher module to execute on target devices."""
 import importlib
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from jnpr.junos import Device
 from netmiko import ConnectHandler, BaseConnection
 from .commander import Command
@@ -10,29 +10,33 @@ JUNOS_CUSTOM_MODULES = "netcollector.extras.junos_tables"
 JUNOS_PYEZ_MODULES = "jnpr.junos.op"
 
 
-class NetmikoError(Exception):
+class DispatcherError(Exception):
     pass
 
 
-class PyezError(Exception):
+class NetmikoError(DispatcherError):
     pass
 
 
-class NetmikoAdapter:  # pylint: disable=too-few-public-methods
-    """Netmiko Adapter to interact with a target device.
+class PyezError(DispatcherError):
+    pass
+
+
+class NetmikoDispatcher:  # pylint: disable=too-few-public-methods
+    """Netmiko Dispatcher to interact with a target device.
     Raises:
         NetmikoError: Netmiko related issues
     """
 
     outter_dev: Optional[BaseConnection] = None
 
-    class NetmikoAdapterDev:
+    class NetmikoDispatcherDev:
         def __init__(self, connector):
             self.connector = connector
 
         def __enter__(self):
-            if not NetmikoAdapter.outter_dev:
-                NetmikoAdapter.outter_dev = ConnectHandler(
+            if not NetmikoDispatcher.outter_dev:
+                NetmikoDispatcher.outter_dev = ConnectHandler(
                     host=self.connector.host,
                     username=self.connector.username,
                     password=self.connector.password.get_secret_value(),
@@ -43,17 +47,17 @@ class NetmikoAdapter:  # pylint: disable=too-few-public-methods
                     port=self.connector.ssh_port,
                 )
 
-            return NetmikoAdapter.outter_dev
+            return NetmikoDispatcher.outter_dev
 
         def __exit__(self, type, value, traceback):
             if not self.connector.persist:
-                if NetmikoAdapter.outter_dev:
-                    NetmikoAdapter.outter_dev.disconnect()
+                if NetmikoDispatcher.outter_dev:
+                    NetmikoDispatcher.outter_dev.disconnect()
 
-                NetmikoAdapter.outter_dev = None
+                NetmikoDispatcher.outter_dev = None
 
     @classmethod
-    def execute(cls, commands: List[Command], connector: ConnectParams):
+    def execute(cls, commands: List[Command], connector: ConnectParams) -> Tuple[Optional[DispatcherError], str]:
         """Execute a list of commands using netmiko driver.
         Args:
             commands (List[Command]): List of Command to execute
@@ -61,23 +65,30 @@ class NetmikoAdapter:  # pylint: disable=too-few-public-methods
         Raises:
             NetmikoError: Netmiko related issues
         """
+        error = None
+        msg = ""
         try:
-            with cls.NetmikoAdapterDev(connector=connector) as dev:
+            with cls.NetmikoDispatcherDev(connector=connector) as dev:
                 for command in commands:
                     # command.params usually has parsing technique like use_genie=True
+                    command.start_timing()
                     command.result = dev.send_command(command.command, **command.params)
+                    command.stop_timing()
         except Exception as err:
-            raise NetmikoError(f"Driver failed execution: {err}") from err
+            # raise NetmikoError(f"Driver failed execution: {err}") from err
+            msg = f"Driver failed execution: {err}"
+            error = NetmikoError(msg)
+        return error, msg
 
 
-class PyEZAdapter:  # pylint: disable=too-few-public-methods
-    """PyEZ Adapter to interact with a target device.
+class PyEZDispatcher:  # pylint: disable=too-few-public-methods
+    """PyEZ Dispatcher to interact with a target device.
     Raises:
         PyezError: PyEZ related issues
     """
 
     @staticmethod
-    def execute(commands: List[Command], connector: ConnectParams):
+    def execute(commands: List[Command], connector: ConnectParams) -> Tuple[Optional[DispatcherError], str]:
         """Execute a list of commands using junos-eznc driver.
         It supports 2 methods to collect and parse the data.
         - Using the `table and view` method. See: https://www.juniper.net/documentation/en_US/junos-pyez/topics/concept/junos-pyez-tables-and-views-overview.html
@@ -88,6 +99,8 @@ class PyEZAdapter:  # pylint: disable=too-few-public-methods
         Raises:
             PyezError: PyEZ related issues
         """
+        error = None
+        msg = ""
         conn_data = dict(
             host=connector.host,
             user=connector.username,
@@ -109,28 +122,36 @@ class PyEZAdapter:  # pylint: disable=too-few-public-methods
 
                             # The table is loaded dynamically from the <protocol>.<table>.
                             # For example this line could be read as: table = bgp.NtcBgpTable(dev)
+                            command.start_timing()
                             table = getattr(module, command.params["table"])(dev)
+                            command.stop_timing()
                         except (ModuleNotFoundError, AttributeError):
 
                             # If module or table is not available in JUNOS_CUSTOM_MODULES, try with the Pyez ones
                             try:
                                 module = importlib.import_module(f"{JUNOS_PYEZ_MODULES}.{protocol}")
+                                command.start_timing()
                                 table = getattr(module, command.params["table"])(dev)
+                                command.stop_timing()
                             except ModuleNotFoundError as err:
-                                raise PyezError(
-                                    f"Driver execution failed: Module {protocol} not found in custom nor PyEZ tables"
-                                ) from err
+                                msg = (
+                                    f"Driver execution failed: Module {protocol} not found in custom nor PyEZ tables." f"\nNative error: {err}"
+                                )
+                                error = PyezError(msg)
+                                return error, msg
 
                             except AttributeError as err:
-                                raise PyezError(
+                                msg = (
                                     f"Driver execution failed: Table {command.params['table']} for module "
-                                    f"{protocol} not found in custom nor PyEZ tables"
-                                ) from err
+                                    f"{protocol} not found in custom nor PyEZ tables.\nNative error: {err}"
+                                )
+                                error = PyezError(msg)
+                                return error, msg
 
                         command.result = table.get()
                     else:
                         command.result = dev.rpc.get(command.command)
-        except PyezError:
-            raise
         except Exception as err:
-            raise PyezError(f"Driver failed execution: {err}") from err
+            msg = f"Driver failed execution (unknown exception): {err}"
+            error = PyezError(msg)
+        return error, msg

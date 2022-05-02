@@ -1,10 +1,8 @@
 """Module which holds VPN Session data model and the respective processors that generate it."""
 import re
-
 from typing import Optional
-
-from pydantic import BaseModel
 from .influx import format_influx_metrics
+from .base import BaseResourceModel
 
 
 class VpnSessionsError(Exception):
@@ -28,7 +26,7 @@ def slugify(string: str, length: int = 50) -> str:
     return string[:length]
 
 
-class AsaVpnStats(BaseModel):
+class AsaVpnStats(BaseResourceModel):
     active: Optional[int] = None
     cumulative: Optional[int] = None
     peak_concurrent: Optional[int] = None
@@ -58,7 +56,7 @@ class AsaVpnStats(BaseModel):
         return format_influx_metrics("vpn_session", data=fields, tags=tags)
 
 
-class AsaTunnelStats(BaseModel):
+class AsaTunnelStats(BaseResourceModel):
     active: Optional[int] = None
     cumulative: Optional[int] = None
     peak_concurrent: Optional[int] = None
@@ -86,7 +84,7 @@ class AsaTunnelStats(BaseModel):
         return format_influx_metrics("vpn_tunnel", data=fields, tags=tags)
 
 
-class AsaGlobalStats(BaseModel):
+class AsaGlobalStats(BaseResourceModel):
     total_active_and_inactive: Optional[int] = None
     total_cumulative: Optional[int] = None
     device_total_vpn_capacity: Optional[int] = None

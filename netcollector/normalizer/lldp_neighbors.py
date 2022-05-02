@@ -1,21 +1,19 @@
 """Module which holds LLDP Neighbors data model and the repective processors that generates it."""
 from typing import Optional, List
-
-from .influx import format_influx_metrics
-
-from pydantic import BaseModel
 from netcollector.commander import Command
 from netcollector.connector import ConnectParams
+from .influx import format_influx_metrics
+from .base import BaseResourceModel
 
 
 class LLDPNeighborError(Exception):
     pass
 
 
-class LLDPNeighbor(BaseModel):
+class LLDPNeighbor(BaseResourceModel):
     """LLDP Neighbors data model.
     Args:
-        BaseModel: Base Collector data model
+        BaseResourceModel: Base Collector data model
     """
 
     interface: str
