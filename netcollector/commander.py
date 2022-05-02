@@ -1,6 +1,6 @@
 """Module which holds commands definitions and exector map."""
 import uuid
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Literal, Tuple, Any, Optional
 from datetime import datetime
 from pydantic import BaseModel
 
@@ -63,6 +63,7 @@ class Command(BaseModel):
 
     executor: str
     collector: str
+    collection_method: Literal["ssh", "netconf", "snmp"]
     command: str
     params: Dict[str, Any] = dict()
     result: Optional[Any] = None
@@ -82,7 +83,7 @@ class Command(BaseModel):
 
 def create_commands(  # pylint: disable=dangerous-default-value
     device_type: str,
-    collectors: List[Tuple[str, str]],
+    collectors: List[Tuple[str, Literal["ssh", "netconf", "snmp"]]],
     executor_map: Dict[Tuple[str, str], Dict[str, Any]] = EXECUTOR_MAP,
 ) -> List[Command]:
     """Creates a list of Command instances.
@@ -115,6 +116,7 @@ def create_commands(  # pylint: disable=dangerous-default-value
                 command=_command,
                 executor=directives["executor"],
                 collector=collector,
+                collection_method=collection_method,
                 params=directives.get("params", {}),
             )
             for _command in directives["commands"]
