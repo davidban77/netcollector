@@ -1,0 +1,30 @@
+---
+NtcBgpTable:
+  rpc: get-bgp-neighbor-information
+  item: bgp-peer
+  view: bgpView
+  key: peer-id
+
+bgpView:
+  fields:
+    local_as: local-as
+    peer_as: peer-as
+    local_address: local-address
+    peer_address: peer-address
+    peer_id: peer-id
+    local_id: local-id
+    desc: description
+    peer_type: peer-type
+    peer_state: peer-state
+    export_policy: bgp-option-information/export-policy
+    import_policy: bgp-option-information/import-policy
+    flap_count: flap-count
+    active_holdtime: active-holdtime
+    keepalive_interval: keepalive-interval
+    group_index: group-index
+    peer_index: peer-index
+    prefixes_received: bgp-rib/received-prefix-count
+    prefixes_accepted: bgp-rib/accepted-prefix-count
+    prefixes_active: bgp-rib/active-prefix-count
+    prefixes_suppressed: bgp-rib/suppressed-prefix-count
+    prefixes_advertised: bgp-rib/advertised-prefix-count
